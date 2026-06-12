@@ -1,4 +1,5 @@
-/sql_parser_project_spec.md/
-/progress.md/
-sql_parser_project_spec
-progress
+sql_parser_project_spec.md
+progress.md
+.DS_Store
+*.o
+sql_parser
