@@ -4,6 +4,7 @@ TARGET   = sql_parser
 SRCDIR   = src
 SRCS     = $(SRCDIR)/main.cpp \
            $(SRCDIR)/lexer.cpp \
+           $(SRCDIR)/parser.cpp \
            $(SRCDIR)/error_reporter.cpp
 OBJS     = $(SRCS:.cpp=.o)
 

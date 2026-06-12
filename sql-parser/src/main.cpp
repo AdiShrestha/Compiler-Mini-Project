@@ -1,30 +1,11 @@
-// main.cpp  —  Phase 1 stub: tokenizes input and prints the token list.
-// This will be replaced in Phase 4 with the full REPL + parser integration.
+// main.cpp
+// Integrated with Lexer and Parser (Phase 2)
 #include "lexer.h"
+#include "parser.h"
 #include "error_reporter.h"
 #include <iostream>
 #include <string>
 #include <iomanip>
-
-static void printTokens(const std::vector<Token>& tokens) {
-    std::cout << "\n";
-    std::cout << std::left
-              << std::setw(5)  << "Line"
-              << std::setw(5)  << "Col"
-              << std::setw(22) << "Type"
-              << "Lexeme\n";
-    std::cout << std::string(50, '-') << "\n";
-
-    for (const auto& tok : tokens) {
-        if (tok.type == TokenType::END_OF_FILE) break;
-        std::cout << std::left
-                  << std::setw(5)  << tok.line
-                  << std::setw(5)  << tok.column
-                  << std::setw(22) << tok.typeToString()
-                  << tok.lexeme    << "\n";
-    }
-    std::cout << "\n";
-}
 
 static void runQuery(const std::string& query) {
     ErrorReporter reporter;
@@ -32,19 +13,30 @@ static void runQuery(const std::string& query) {
     auto tokens = lexer.tokenize();
 
     if (reporter.hasErrors()) {
-        std::cout << "  [LEXER ERRORS]\n";
+        std::cout << "\n  ✗  INVALID SQL  (Lexer errors)\n";
+        std::cout << "─────────────────────────────────────────────\n";
         reporter.printAll();
+        return;
+    }
+
+    Parser parser(tokens, reporter);
+    auto result = parser.parse();
+
+    if (result.valid) {
+        std::cout << "\n  ✔  VALID SQL\n";
+        std::cout << "─────────────────────────────────────────────\n";
+        std::cout << "  Tokens   : " << tokens.size() - 1 << "\n";
+        if (!tokens.empty() && tokens[0].type != TokenType::END_OF_FILE) {
+            std::cout << "  Statement: " << tokens[0].lexeme << "\n";
+        }
     } else {
-        std::cout << "  Tokens (" << (tokens.size() - 1) << "):\n";
-        printTokens(tokens);
+        std::cout << "\n  ✗  INVALID SQL  (" << reporter.errorCount() << " errors)\n";
+        std::cout << "─────────────────────────────────────────────\n";
+        reporter.printAll();
     }
 }
 
 int main(int argc, char* argv[]) {
-    std::cout << "==============================================\n";
-    std::cout << "  SQL Parser — Phase 1 (Lexer Demo)\n";
-    std::cout << "==============================================\n";
-
     if (argc >= 2) {
         // Single query from command line
         runQuery(argv[1]);
@@ -54,7 +46,7 @@ int main(int argc, char* argv[]) {
     // Interactive mode
     std::string line;
     while (true) {
-        std::cout << "sql> ";
+        std::cout << "\nsql> ";
         if (!std::getline(std::cin, line)) break;
         if (line == "exit" || line == "quit") break;
         if (line.empty()) continue;
