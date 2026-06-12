@@ -157,9 +157,6 @@ void Parser::parseSelectItem() {
     parseExpression();
     if (match(TokenType::KW_AS)) {
         expect(TokenType::IDENTIFIER, "expected alias identifier after AS");
-    } else if (check(TokenType::IDENTIFIER)) {
-        // Optional alias without AS
-        consume();
     }
 }
 
