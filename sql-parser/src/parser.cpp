@@ -394,59 +394,184 @@ void Parser::parsePrimary() {
 
 void Parser::parseColumnList() {
     expect(TokenType::IDENTIFIER, "expected column name");
+    if (match(TokenType::DOT)) {
+        expect(TokenType::IDENTIFIER, "expected column name after '.'");
+    }
     while (match(TokenType::COMMA)) {
         expect(TokenType::IDENTIFIER, "expected column name");
+        if (match(TokenType::DOT)) {
+            expect(TokenType::IDENTIFIER, "expected column name after '.'");
+        }
     }
 }
 
-// ── Phase 3 Stubs ──
+// ── Phase 3 Implementations ──
 
 void Parser::parseCreateStmt() {
-    // Phase 3
-    reporter_.error(current(), "CREATE TABLE is not implemented in Phase 2");
-    synchronize();
+    expect(TokenType::KW_TABLE, "expected TABLE keyword after CREATE");
+    if (match(TokenType::KW_IF)) {
+        expect(TokenType::KW_NOT, "expected NOT after IF");
+        expect(TokenType::KW_EXISTS, "expected EXISTS after IF NOT");
+    }
+    expect(TokenType::IDENTIFIER, "expected table name");
+    expect(TokenType::LPAREN, "expected '(' before column definitions");
+    parseColumnDefList();
+    if (match(TokenType::COMMA)) {
+        parseTableConstraints();
+    }
+    expect(TokenType::RPAREN, "expected ')' after table definition");
 }
 
 void Parser::parseDropStmt() {
-    // Phase 3
-    reporter_.error(current(), "DROP TABLE is not implemented in Phase 2");
-    synchronize();
+    expect(TokenType::KW_TABLE, "expected TABLE keyword after DROP");
+    if (match(TokenType::KW_IF)) {
+        expect(TokenType::KW_EXISTS, "expected EXISTS after IF");
+    }
+    expect(TokenType::IDENTIFIER, "expected table name");
 }
 
 void Parser::parseJoinClause() {
-    // Consume until WHERE/GROUP/ORDER or end
-    while (!isAtEnd() && !check(TokenType::KW_WHERE) && !check(TokenType::KW_GROUP) && !check(TokenType::KW_ORDER) && !check(TokenType::KW_LIMIT) && !check(TokenType::SEMICOLON)) {
-        consume();
+    while (check(TokenType::KW_INNER) || check(TokenType::KW_LEFT) || check(TokenType::KW_RIGHT) || check(TokenType::KW_FULL) || check(TokenType::KW_JOIN)) {
+        if (matchAny({TokenType::KW_INNER, TokenType::KW_LEFT, TokenType::KW_RIGHT, TokenType::KW_FULL})) {
+            match(TokenType::KW_OUTER); // optional
+        }
+        expect(TokenType::KW_JOIN, "expected JOIN keyword");
+        parseTableRef();
+        expect(TokenType::KW_ON, "expected ON keyword");
+        parseCondition();
     }
 }
 
 void Parser::parseGroupByClause() {
     expect(TokenType::KW_BY, "expected BY after GROUP");
-    while (!isAtEnd() && !check(TokenType::KW_HAVING) && !check(TokenType::KW_ORDER) && !check(TokenType::KW_LIMIT) && !check(TokenType::SEMICOLON)) {
-        consume();
-    }
+    parseColumnList();
 }
 
 void Parser::parseHavingClause() {
-    while (!isAtEnd() && !check(TokenType::KW_ORDER) && !check(TokenType::KW_LIMIT) && !check(TokenType::SEMICOLON)) {
-        consume();
-    }
+    parseCondition();
 }
 
 void Parser::parseOrderByClause() {
     expect(TokenType::KW_BY, "expected BY after ORDER");
-    while (!isAtEnd() && !check(TokenType::KW_LIMIT) && !check(TokenType::SEMICOLON)) {
-        consume();
+    parseExpression();
+    matchAny({TokenType::KW_ASC, TokenType::KW_DESC}); // optional
+    
+    while (match(TokenType::COMMA)) {
+        parseExpression();
+        matchAny({TokenType::KW_ASC, TokenType::KW_DESC});
     }
 }
 
 void Parser::parseLimitClause() {
-    consume(); // integer literal
-    if (match(TokenType::KW_OFFSET)) consume();
+    expect(TokenType::INTEGER_LITERAL, "expected integer literal after LIMIT");
+    if (match(TokenType::KW_OFFSET)) {
+        expect(TokenType::INTEGER_LITERAL, "expected integer literal after OFFSET");
+    }
 }
 
-void Parser::parseColumnDefList() {}
-void Parser::parseColumnDef() {}
-void Parser::parseDataType() {}
-void Parser::parseColumnConstraints() {}
-void Parser::parseTableConstraints() {}
+void Parser::parseColumnDefList() {
+    parseColumnDef();
+    while (check(TokenType::COMMA)) {
+        if (peek(1).type == TokenType::KW_PRIMARY || peek(1).type == TokenType::KW_UNIQUE || peek(1).type == TokenType::KW_FOREIGN) {
+            break;
+        }
+        consume(); // consume COMMA
+        parseColumnDef();
+    }
+}
+
+void Parser::parseColumnDef() {
+    expect(TokenType::IDENTIFIER, "expected column name");
+    parseDataType();
+    parseColumnConstraints();
+}
+
+void Parser::parseDataType() {
+    if (matchAny({TokenType::KW_INT, TokenType::KW_INTEGER, TokenType::KW_BIGINT, TokenType::KW_SMALLINT,
+                  TokenType::KW_TEXT, TokenType::KW_CLOB, TokenType::KW_FLOAT, TokenType::KW_DOUBLE,
+                  TokenType::KW_BOOLEAN, TokenType::KW_BOOL, TokenType::KW_DATE, TokenType::KW_DATETIME, TokenType::KW_TIMESTAMP})) {
+        return;
+    }
+    
+    if (matchAny({TokenType::KW_VARCHAR, TokenType::KW_CHAR})) {
+        expect(TokenType::LPAREN, "expected '(' for length");
+        expect(TokenType::INTEGER_LITERAL, "expected length integer");
+        expect(TokenType::RPAREN, "expected ')' after length");
+    } else if (match(TokenType::KW_DECIMAL)) {
+        expect(TokenType::LPAREN, "expected '(' for decimal precision");
+        expect(TokenType::INTEGER_LITERAL, "expected precision integer");
+        expect(TokenType::COMMA, "expected ','");
+        expect(TokenType::INTEGER_LITERAL, "expected scale integer");
+        expect(TokenType::RPAREN, "expected ')' after decimal arguments");
+    } else {
+        reporter_.error(current(), "Unexpected token '" + current().lexeme + "' — expected data type");
+        consume();
+    }
+}
+
+void Parser::parseColumnConstraints() {
+    while (true) {
+        if (match(TokenType::KW_NOT)) {
+            expect(TokenType::KW_NULL, "expected NULL after NOT");
+        } else if (match(TokenType::KW_NULL)) {
+            // just NULL
+        } else if (match(TokenType::KW_PRIMARY)) {
+            expect(TokenType::KW_KEY, "expected KEY after PRIMARY");
+        } else if (match(TokenType::KW_UNIQUE)) {
+            // UNIQUE
+        } else if (match(TokenType::KW_DEFAULT)) {
+            if (!matchAny({TokenType::INTEGER_LITERAL, TokenType::FLOAT_LITERAL, TokenType::STRING_LITERAL, TokenType::KW_TRUE, TokenType::KW_FALSE, TokenType::KW_NULL})) {
+                reporter_.error(current(), "expected literal value after DEFAULT");
+                consume();
+            }
+        } else if (match(TokenType::KW_AUTO_INCREMENT)) {
+            // AUTO_INCREMENT
+        } else if (match(TokenType::KW_CHECK)) {
+            expect(TokenType::LPAREN, "expected '(' after CHECK");
+            parseCondition();
+            expect(TokenType::RPAREN, "expected ')' after CHECK condition");
+        } else if (match(TokenType::KW_REFERENCES)) {
+            expect(TokenType::IDENTIFIER, "expected referenced table name");
+            if (match(TokenType::LPAREN)) {
+                expect(TokenType::IDENTIFIER, "expected referenced column name");
+                expect(TokenType::RPAREN, "expected ')' after referenced column");
+            }
+        } else {
+            break;
+        }
+    }
+}
+
+void Parser::parseTableConstraints() {
+    while (true) {
+        if (match(TokenType::KW_PRIMARY)) {
+            expect(TokenType::KW_KEY, "expected KEY after PRIMARY");
+            expect(TokenType::LPAREN, "expected '('");
+            parseColumnList();
+            expect(TokenType::RPAREN, "expected ')'");
+        } else if (match(TokenType::KW_UNIQUE)) {
+            expect(TokenType::LPAREN, "expected '('");
+            parseColumnList();
+            expect(TokenType::RPAREN, "expected ')'");
+        } else if (match(TokenType::KW_FOREIGN)) {
+            expect(TokenType::KW_KEY, "expected KEY after FOREIGN");
+            expect(TokenType::LPAREN, "expected '('");
+            parseColumnList();
+            expect(TokenType::RPAREN, "expected ')'");
+            expect(TokenType::KW_REFERENCES, "expected REFERENCES after FOREIGN KEY definition");
+            expect(TokenType::IDENTIFIER, "expected referenced table name");
+            expect(TokenType::LPAREN, "expected '('");
+            parseColumnList();
+            expect(TokenType::RPAREN, "expected ')'");
+        } else {
+            break;
+        }
+        
+        if (!check(TokenType::COMMA)) break;
+        if (peek(1).type == TokenType::KW_PRIMARY || peek(1).type == TokenType::KW_UNIQUE || peek(1).type == TokenType::KW_FOREIGN) {
+            consume();
+        } else {
+            break;
+        }
+    }
+}
