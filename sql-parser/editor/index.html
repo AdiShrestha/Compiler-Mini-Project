@@ -181,14 +181,14 @@
         border-right: 1px solid var(--border);
         padding: 16px 0;
         text-align: right;
-        font-size: 12px;
+        font-size: 14px;
         line-height: 1.7;
         color: var(--text3);
         user-select: none;
         overflow: hidden;
       }
       .gutter div {
-        padding: 0 12px;
+        padding: 0 14px;
         transition: color 0.15s;
       }
       .gutter .active {
@@ -494,10 +494,10 @@
         }
         .gutter {
           width: 42px;
-          font-size: 11px;
+          font-size: 13px;
         }
         .gutter div {
-          padding: 0 8px;
+          padding: 0 10px;
         }
         #sql-ed {
           padding: 12px 14px;
@@ -664,35 +664,60 @@ SELECT * FROM users;</textarea
         function show(data) {
           res.classList.remove("collapsed");
           res.classList.add("open");
-          if (data.valid) {
+
+          var stmts = data.statements || [];
+          var validCount = stmts.filter(function(s) { return s.valid; }).length;
+          var total = stmts.length;
+
+          if (total === 0) {
+            badge.className = "badge err";
+            badge.innerHTML = "&#10007; NO QUERY";
+            rMeta.textContent = "";
+            rBody.innerHTML = '<p class="val" style="color:var(--text3)">Enter a SQL statement</p>';
+            return;
+          }
+
+          if (validCount === total) {
             badge.className = "badge ok";
-            badge.innerHTML = "&#10003; VALID";
-            rMeta.textContent =
-              data.tokens + " token" + (data.tokens !== 1 ? "s" : "");
-            rBody.innerHTML =
-              '<p class="label">Statement</p><p class="val">' +
-              esc(data.statement) +
-              "</p>" +
-              (data.tokens > 0
-                ? '<p class="label">Tokens</p><p class="val">' +
-                  data.tokens +
-                  "</p>"
-                : "");
+            badge.innerHTML = "&#10003; ALL VALID";
+          } else if (validCount === 0) {
+            badge.className = "badge err";
+            badge.innerHTML = "&#10007; ALL INVALID";
           } else {
             badge.className = "badge err";
-            badge.innerHTML = "&#10007; INVALID";
-            rMeta.textContent =
-              data.errorCount + " error" + (data.errorCount !== 1 ? "s" : "");
-            if (data.errors && data.errors.length) {
-              var h = "";
-              data.errors.forEach(function (e) {
+            badge.innerHTML = "&#9888; " + validCount + "/" + total + " VALID";
+          }
+          rMeta.textContent = total + " statement" + (total !== 1 ? "s" : "");
+
+          var h = "";
+          stmts.forEach(function(s, idx) {
+            h += '<div style="margin-bottom:16px; border-bottom:1px solid var(--border); padding-bottom:12px">';
+            h += '<div style="display:flex; align-items:center; gap:8px; margin-bottom:6px">';
+            h += '<span style="font-size:10px; color:var(--text3); font-weight:600; letter-spacing:0.4px">#' + (idx + 1) + '</span>';
+            if (s.valid) {
+              h += '<span style="font-size:10px; font-weight:700; color:var(--success); letter-spacing:0.4px">&#10003; VALID</span>';
+            } else {
+              h += '<span style="font-size:10px; font-weight:700; color:var(--danger2); letter-spacing:0.4px">&#10007; INVALID</span>';
+            }
+            h += '<span style="font-size:10px; color:var(--text3)">' + s.tokens + ' token' + (s.tokens !== 1 ? 's' : '') + '</span>';
+            h += '</div>';
+            h += '<p class="label">SQL</p><p class="val" style="word-break:break-all">' + esc(s.sql) + '</p>';
+            if (s.valid) {
+              h += '<p class="label">Statement</p><p class="val">' + esc(s.statement || '—') + '</p>';
+            }
+            if (!s.valid && s.errors && s.errors.length) {
+              var seen = {};
+              s.errors.forEach(function(e) {
+                var key = e.line + ':' + e.column;
+                if (seen[key]) return;
+                seen[key] = true;
+                var loc = 'line ' + e.line + ' · col ' + e.column;
+                if (!e.lexeme && e.column === s.sql.length + 1) {
+                  loc = 'at end of statement';
+                }
                 h +=
-                  '<div class="err-item">' +
-                  '<div class="e-loc">line <span class="hl">' +
-                  e.line +
-                  '</span> · col <span class="hl">' +
-                  e.column +
-                  "</span></div>" +
+                  '<div class="err-item" style="margin-bottom:4px">' +
+                  '<div class="e-loc">' + loc + "</div>" +
                   '<div class="e-msg">' +
                   esc(e.message) +
                   "</div>" +
@@ -701,14 +726,10 @@ SELECT * FROM users;</textarea
                     : "") +
                   "</div>";
               });
-              rBody.innerHTML = h;
-            } else {
-              rBody.innerHTML =
-                '<p class="val" style="color:var(--text3)">' +
-                esc(data.summary) +
-                "</p>";
             }
-          }
+            h += "</div>";
+          });
+          rBody.innerHTML = h;
         }
 
         /* ─── Parse ─── */
@@ -735,6 +756,7 @@ SELECT * FROM users;</textarea
             .catch(function (e) {
               st("err", "error");
               res.classList.add("open");
+              res.classList.remove("collapsed");
               badge.className = "badge err";
               badge.innerHTML = "&#10007; ERROR";
               rMeta.textContent = "";
