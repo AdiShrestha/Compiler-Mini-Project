@@ -706,26 +706,55 @@ SELECT * FROM users;</textarea
               h += '<p class="label">Statement</p><p class="val">' + esc(s.statement || '—') + '</p>';
             }
             if (!s.valid && s.errors && s.errors.length) {
-              var seen = {};
-              s.errors.forEach(function(e) {
-                var key = e.line + ':' + e.column;
-                if (seen[key]) return;
-                seen[key] = true;
-                var loc = 'line ' + e.line + ' · col ' + e.column;
-                if (!e.lexeme && e.column === s.sql.length + 1) {
-                  loc = 'at end of statement';
+              var first = s.errors[0];
+              var msg = first.message;
+              var tok = first.lexeme;
+              var loc = 'line ' + first.line + ' · col ' + first.column;
+              var atEnd = !tok && first.column === s.sql.length + 1;
+
+              if (atEnd) {
+                loc = 'at end of statement';
+                var up = s.sql.toUpperCase().trim();
+                if (/^SELECT\s*$/.test(up)) {
+                  msg = 'missing column list or \'*\' after SELECT';
+                } else if (/^SELECT\s+\w+\s+FROM\s*$/.test(up)) {
+                  msg = 'missing table name after FROM';
+                } else if (/^INSERT(\s+INTO)?\s*\w*\s*$/.test(up)) {
+                  msg = 'incomplete INSERT — missing VALUES clause';
+                } else if (/^CREATE\s+(TABLE\s*)?$/.test(up)) {
+                  msg = 'incomplete CREATE — missing table definition';
+                } else if (/^DROP\s+(TABLE\s*)?$/.test(up)) {
+                  msg = 'incomplete DROP — missing table name';
+                } else if (/^UPDATE\s+\w+\s*$/.test(up)) {
+                  msg = 'incomplete UPDATE — missing SET clause';
+                } else if (/^DELETE\s+(FROM\s*)?$/.test(up)) {
+                  msg = 'incomplete DELETE — missing table name';
+                } else if (/^SELECT\s/.test(up)) {
+                  msg = 'incomplete SELECT statement';
+                } else {
+                  msg = 'incomplete statement — unexpected end of input';
                 }
-                h +=
-                  '<div class="err-item" style="margin-bottom:4px">' +
-                  '<div class="e-loc">' + loc + "</div>" +
-                  '<div class="e-msg">' +
-                  esc(e.message) +
-                  "</div>" +
-                  (e.lexeme
-                    ? '<div class="e-tok">near \'' + esc(e.lexeme) + "'</div>"
-                    : "") +
-                  "</div>";
-              });
+              } else if (tok) {
+                if (msg.indexOf("in expression") !== -1) {
+                  if (/^(SELECT|select)/.test(s.sql.trim())) {
+                    msg = "expected column name, literal, or '*' here, but found '" + tok + "'";
+                  }
+                }
+                if (msg.indexOf("expected SQL statement") !== -1) {
+                  msg = "unrecognized statement '" + tok + "'";
+                }
+              }
+
+              h +=
+                '<div class="err-item" style="margin-bottom:4px">' +
+                '<div class="e-loc">' + loc + "</div>" +
+                '<div class="e-msg">' +
+                esc(msg) +
+                "</div>" +
+                (tok && !atEnd
+                  ? '<div class="e-tok">near \'' + esc(tok) + "'</div>"
+                  : "") +
+                "</div>";
             }
             h += "</div>";
           });
