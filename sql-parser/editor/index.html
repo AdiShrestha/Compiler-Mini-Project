@@ -1,0 +1,826 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SQL Parser</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      :root {
+        --bg: #0b0b14;
+        --surface: #13131e;
+        --surface2: #1a1a28;
+        --border: #1f1f30;
+        --text: #e4e4f0;
+        --text2: #9494aa;
+        --text3: #54546a;
+        --accent: #140f1d;
+        --accent2: #22d3ee;
+        --accent3: #a78bfa;
+        --success: #10b981;
+        --danger: #ef4444;
+        --danger2: #f43f5e;
+        --amber: #f59e0b;
+        --radius: 8px;
+        --font: "SF Mono", "Fira Code", "Cascadia Code", "Menlo", monospace;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+
+      /* ─── Header ─── */
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        height: 56px;
+        flex-shrink: 0;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+      }
+      .logo {
+        font-size: 16px;
+        font-weight: 500;
+        letter-spacing: 1px;
+        color: var(--text3);
+        user-select: none;
+      }
+      .logo span {
+        color: var(--text);
+        font-weight: 600;
+      }
+      .logo .sym {
+        color: var(--accent2);
+        font-weight: 400;
+      }
+
+      .hdr-right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .hint {
+        font-size: 14px;
+        color: var(--text3);
+        margin-right: 6px;
+        letter-spacing: 0.3px;
+      }
+      kbd {
+        display: inline-block;
+        padding: 2px 6px 1px;
+        font-size: 9px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--bg);
+        color: var(--text3);
+        font-family: inherit;
+      }
+      .hdr-sep {
+        width: 1px;
+        height: 26px;
+        background: var(--border);
+        margin: 0 6px;
+      }
+
+      /* ─── Buttons ─── */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        height: 36px;
+        padding: 0 14px;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        border-radius: var(--radius);
+        transition: all 0.15s;
+        white-space: nowrap;
+        user-select: none;
+      }
+      .btn-icon {
+        width: 36px;
+        padding: 0;
+        font-size: 28px;
+      }
+
+      /* neutral */
+      .btn-ghost {
+        background: transparent;
+        color: var(--text2);
+      }
+      .btn-ghost:hover {
+        background: var(--surface2);
+        color: var(--text);
+      }
+
+      /* clear – danger */
+      .btn-clr {
+        background: transparent;
+        color: rgb(180, 9, 9);
+      }
+      .btn-clr:hover {
+        background: rgba(244, 63, 94, 0.1);
+        color: var(--danger);
+      }
+
+      /* run – accent gradient */
+      .btn-run {
+        background: linear-gradient(25deg, var(--accent), var(--accent2));
+        color: #fff;
+        font-weight: 700;
+        font-size: 13px;
+        padding: 0 22px;
+        letter-spacing: 0.4px;
+        box-shadow: 0 0 20px rgba(124, 58, 237, 0.15);
+      }
+      .btn-run:hover {
+        box-shadow: 0 0 30px rgba(124, 58, 237, 0.3);
+        transform: translateY(-1px);
+      }
+      .btn-run:active {
+        transform: translateY(0);
+        opacity: 0.9;
+      }
+      .btn-run:disabled {
+        opacity: 0.3;
+        cursor: default;
+        transform: none;
+        box-shadow: none;
+      }
+
+      /* ─── Editor ─── */
+      .ed-wrap {
+        flex: 1;
+        display: flex;
+        position: relative;
+        min-height: 0;
+      }
+      .gutter {
+        width: 54px;
+        flex-shrink: 0;
+        background: var(--bg);
+        border-right: 1px solid var(--border);
+        padding: 16px 0;
+        text-align: right;
+        font-size: 12px;
+        line-height: 1.7;
+        color: var(--text3);
+        user-select: none;
+        overflow: hidden;
+      }
+      .gutter div {
+        padding: 0 12px;
+        transition: color 0.15s;
+      }
+      .gutter .active {
+        color: var(--accent2);
+      }
+
+      #sql-ed {
+        flex: 1;
+        resize: none;
+        border: none;
+        outline: none;
+        background: transparent;
+        color: var(--text);
+        font: inherit;
+        font-size: 14px;
+        line-height: 1.7;
+        padding: 16px 20px;
+        tab-size: 4;
+        white-space: pre;
+        overflow-wrap: normal;
+        overflow-x: auto;
+        overflow-y: auto;
+      }
+      #sql-ed::placeholder {
+        color: var(--text3);
+      }
+      #sql-ed:focus {
+        background: transparent;
+      }
+
+      /* ─── Status ─── */
+      .status {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px;
+        height: 30px;
+        flex-shrink: 0;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        font-size: 11px;
+        color: var(--text3);
+      }
+      .st-ind {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .st-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--text3);
+        transition: all 0.25s;
+      }
+      .st-dot.ready {
+        background: var(--text3);
+      }
+      .st-dot.ok {
+        background: var(--success);
+        box-shadow: 0 0 8px rgba(16, 185, 129, 0.4);
+      }
+      .st-dot.err {
+        background: var(--danger2);
+        box-shadow: 0 0 8px rgba(244, 63, 94, 0.4);
+      }
+      .st-dot.busy {
+        background: var(--amber);
+        animation: blink 0.6s infinite;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 0.2;
+        }
+        50% {
+          opacity: 1;
+        }
+      }
+      .status .pos {
+        color: var(--text3);
+        font-feature-settings: "tnum";
+      }
+
+      /* ─── Results panel (VS Code terminal) ─── */
+      #results {
+        flex-shrink: 0;
+        display: none;
+        flex-direction: column;
+        min-height: 32px;
+        max-height: 75vh;
+        background: var(--bg);
+        border-top: 1px solid var(--border);
+        position: relative;
+      }
+      #results.open {
+        display: flex;
+      }
+      #results.collapsed .res-body {
+        display: none !important;
+      }
+      #results.maxed {
+        max-height: 10000px;
+        height: 70vh;
+      }
+
+      /* drag handle */
+      .res-hdl {
+        position: absolute;
+        top: -5px;
+        left: 0;
+        right: 0;
+        height: 10px;
+        cursor: ns-resize;
+        z-index: 10;
+      }
+      .res-hdl::after {
+        content: "";
+        position: absolute;
+        top: 4px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 48px;
+        height: 3px;
+        border-radius: 2px;
+        background: var(--border);
+        transition: all 0.2s;
+      }
+      .res-hdl:hover::after {
+        background: var(--accent2);
+        width: 64px;
+        height: 4px;
+      }
+      .res-hdl.active::after {
+        background: var(--accent2);
+        width: 64px;
+        height: 4px;
+      }
+
+      /* header bar */
+      .res-hdr {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 16px;
+        height: 36px;
+        flex-shrink: 0;
+        background: var(--surface);
+        border-bottom: 1px solid var(--border);
+        user-select: none;
+      }
+      .res-hdr .title {
+        font-size: 11px;
+        color: var(--text3);
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      .res-hdr .title .hl {
+        color: var(--accent2);
+      }
+      .res-hdr .spc {
+        flex: 1;
+      }
+      .res-hdr .meta {
+        font-size: 11px;
+        color: var(--text3);
+        margin-right: 4px;
+        font-feature-settings: "tnum";
+      }
+
+      /* panel action buttons */
+      .pbtn {
+        width: 28px;
+        height: 28px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: none;
+        color: var(--text3);
+        font-size: 14px;
+        cursor: pointer;
+        border-radius: 5px;
+        transition: all 0.12s;
+        line-height: 1;
+      }
+      .pbtn:hover {
+        background: var(--surface2);
+        color: var(--text2);
+      }
+      .pbtn.close:hover {
+        background: rgba(239, 68, 68, 0.12);
+        color: var(--danger);
+      }
+      .pbtn.gexpand:hover {
+        color: var(--accent2);
+      }
+
+      /* content */
+      .res-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 14px 18px;
+        min-height: 0;
+      }
+      .res-body .label {
+        color: var(--text3);
+        font-size: 10px;
+        letter-spacing: 0.7px;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin-bottom: 3px;
+      }
+      .res-body .val {
+        color: var(--text2);
+        font-size: 13px;
+        margin-bottom: 14px;
+      }
+
+      .err-item {
+        padding: 10px 14px;
+        margin-bottom: 6px;
+        border-left: 3px solid var(--danger2);
+        background: rgba(244, 63, 94, 0.04);
+        font-size: 13px;
+        line-height: 1.6;
+        border-radius: 0 var(--radius) var(--radius) 0;
+      }
+      .err-item .e-loc {
+        color: var(--text3);
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+      }
+      .err-item .e-loc .hl {
+        color: var(--danger2);
+        font-weight: 600;
+      }
+      .err-item .e-msg {
+        color: var(--text);
+        margin-top: 3px;
+      }
+      .err-item .e-tok {
+        color: var(--text3);
+        font-size: 12px;
+        margin-top: 2px;
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 12px;
+        border-radius: 5px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        height: 24px;
+      }
+      .badge.ok {
+        background: rgba(16, 185, 129, 0.12);
+        color: var(--success);
+        box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.2);
+      }
+      .badge.err {
+        background: rgba(244, 63, 94, 0.1);
+        color: var(--danger2);
+        box-shadow: inset 0 0 0 1px rgba(244, 63, 94, 0.15);
+      }
+
+      /* ─── Scroll ─── */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: var(--bg);
+      }
+      ::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--surface2);
+      }
+
+      /* ─── Responsive ─── */
+      @media (max-width: 700px) {
+        header {
+          padding: 0 12px;
+          height: 50px;
+        }
+        .logo {
+          font-size: 14px;
+        }
+        .hint {
+          display: none;
+        }
+        .hdr-sep {
+          display: none;
+        }
+        .gutter {
+          width: 42px;
+          font-size: 11px;
+        }
+        .gutter div {
+          padding: 0 8px;
+        }
+        #sql-ed {
+          padding: 12px 14px;
+          font-size: 13px;
+        }
+        .btn {
+          height: 32px;
+          font-size: 11px;
+        }
+        .btn-icon {
+          width: 32px;
+          font-size: 16px;
+        }
+        .btn-run {
+          padding: 0 16px;
+        }
+      }
+      @media (max-width: 480px) {
+        .btn-run .rn-lbl {
+          display: none;
+        }
+        .res-hdr .title {
+          display: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="logo">
+        sql&gt; <span>parser</span> <span class="sym">◆</span>
+      </div>
+      <div class="hdr-right">
+        <span
+          >[<kbd style="font-size: 19px; color: #9494aa">⌘</kbd>
+          <kbd style="font-size: 19px; color: #9494aa">⏎</kbd>]</span
+        >
+        <div class="hdr-sep"></div>
+        <button class="btn btn-icon btn-clr" id="clr-ed" title="Clear editor">
+          ⌫
+        </button>
+        <button class="btn btn-run" id="run-btn">
+          <span>▶</span> <span class="rn-lbl">Run</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="ed-wrap">
+      <div class="gutter" id="gutter"></div>
+      <textarea id="sql-ed" spellcheck="false" placeholder="Enter SQL…">
+SELECT * FROM users;</textarea
+      >
+    </div>
+
+    <aside id="results">
+      <div class="res-hdl" id="res-hdl"></div>
+      <div class="res-hdr">
+        <span class="badge" id="badge"></span>
+        <span class="meta" id="res-meta"></span>
+        <span class="spc"></span>
+        <span class="title"
+          >results <span class="hl" style="font-size: 20px">▸</span></span
+        >
+        <button
+          class="pbtn gcollapse"
+          id="res-min"
+          title="Collapse"
+          style="font-size: 20px"
+        >
+          ─
+        </button>
+        <button
+          class="pbtn gexpand"
+          id="res-max"
+          title="Maximize"
+          style="font-size: 20px"
+        >
+          □
+        </button>
+        <button
+          class="pbtn close"
+          id="res-close"
+          title="Close"
+          style="font-size: 20px, color:var(--danger)"
+        >
+          ✕
+        </button>
+      </div>
+      <div class="res-body" id="res-body"></div>
+    </aside>
+
+    <div class="status">
+      <div class="st-ind">
+        <span class="st-dot ready" id="st-dot"></span>
+        <span id="st-text">ready</span>
+      </div>
+      <span class="pos" id="cur-pos">Ln 1, Col 1</span>
+    </div>
+
+    <script>
+      (function () {
+        const ed = document.getElementById("sql-ed");
+        const gut = document.getElementById("gutter");
+        const run = document.getElementById("run-btn");
+        const clrEd = document.getElementById("clr-ed");
+        const res = document.getElementById("results");
+        const badge = document.getElementById("badge");
+        const rMeta = document.getElementById("res-meta");
+        const rBody = document.getElementById("res-body");
+        const sDot = document.getElementById("st-dot");
+        const sTxt = document.getElementById("st-text");
+        const cPos = document.getElementById("cur-pos");
+        const rMin = document.getElementById("res-min");
+        const rMax = document.getElementById("res-max");
+        const rCls = document.getElementById("res-close");
+        const hdl = document.getElementById("res-hdl");
+
+        function st(state, text) {
+          sDot.className = "st-dot " + state;
+          sTxt.textContent = text;
+        }
+
+        /* ─── Gutter ─── */
+        function gutter() {
+          const lines = ed.value.split("\n");
+          const lh = 14 * 1.7;
+          const s = ed.scrollTop ? Math.floor(ed.scrollTop / lh) : 0;
+          const v = Math.ceil(ed.clientHeight / lh) + 2;
+          const cl = ed.value.substr(0, ed.selectionStart).split("\n").length;
+          var h = "";
+          const f = Math.max(1, s + 1),
+            t = Math.min(lines.length, s + v);
+          for (var i = f; i <= t; i++)
+            h +=
+              "<div" + (i === cl ? ' class="active"' : "") + ">" + i + "</div>";
+          gut.innerHTML = h;
+          gut.scrollTop = ed.scrollTop;
+        }
+        ed.addEventListener("scroll", gutter);
+        ed.addEventListener("input", gutter);
+        ed.addEventListener("keydown", function () {
+          setTimeout(gutter, 0);
+        });
+
+        /* ─── Cursor ─── */
+        function cursor() {
+          const t = ed.value,
+            p = ed.selectionStart;
+          const b = t.substring(0, p),
+            l = b.split("\n");
+          cPos.textContent =
+            "Ln " + l.length + ", Col " + (l[l.length - 1].length + 1);
+        }
+        ed.addEventListener("keyup", cursor);
+        ed.addEventListener("click", cursor);
+
+        function esc(s) {
+          var d = document.createElement("div");
+          d.appendChild(document.createTextNode(s));
+          return d.innerHTML;
+        }
+
+        /* ─── Show results ─── */
+        function show(data) {
+          res.classList.remove("collapsed");
+          res.classList.add("open");
+          if (data.valid) {
+            badge.className = "badge ok";
+            badge.innerHTML = "&#10003; VALID";
+            rMeta.textContent =
+              data.tokens + " token" + (data.tokens !== 1 ? "s" : "");
+            rBody.innerHTML =
+              '<p class="label">Statement</p><p class="val">' +
+              esc(data.statement) +
+              "</p>" +
+              (data.tokens > 0
+                ? '<p class="label">Tokens</p><p class="val">' +
+                  data.tokens +
+                  "</p>"
+                : "");
+          } else {
+            badge.className = "badge err";
+            badge.innerHTML = "&#10007; INVALID";
+            rMeta.textContent =
+              data.errorCount + " error" + (data.errorCount !== 1 ? "s" : "");
+            if (data.errors && data.errors.length) {
+              var h = "";
+              data.errors.forEach(function (e) {
+                h +=
+                  '<div class="err-item">' +
+                  '<div class="e-loc">line <span class="hl">' +
+                  e.line +
+                  '</span> · col <span class="hl">' +
+                  e.column +
+                  "</span></div>" +
+                  '<div class="e-msg">' +
+                  esc(e.message) +
+                  "</div>" +
+                  (e.lexeme
+                    ? '<div class="e-tok">near \'' + esc(e.lexeme) + "'</div>"
+                    : "") +
+                  "</div>";
+              });
+              rBody.innerHTML = h;
+            } else {
+              rBody.innerHTML =
+                '<p class="val" style="color:var(--text3)">' +
+                esc(data.summary) +
+                "</p>";
+            }
+          }
+        }
+
+        /* ─── Parse ─── */
+        function go() {
+          const sql = ed.value.trim();
+          if (!sql) {
+            st("ready", "nothing to parse");
+            return;
+          }
+          st("busy", "parsing…");
+          run.disabled = true;
+          fetch("/parse", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sql: sql }),
+          })
+            .then(function (r) {
+              return r.json();
+            })
+            .then(function (d) {
+              show(d);
+              st(d.valid ? "ok" : "err", d.valid ? "valid" : "invalid");
+            })
+            .catch(function (e) {
+              st("err", "error");
+              res.classList.add("open");
+              badge.className = "badge err";
+              badge.innerHTML = "&#10007; ERROR";
+              rMeta.textContent = "";
+              rBody.innerHTML =
+                '<p class="val" style="color:var(--text3)">' +
+                esc(e.message) +
+                "</p>";
+            })
+            .finally(function () {
+              run.disabled = false;
+            });
+        }
+
+        /* ─── Clear editor ─── */
+        clrEd.addEventListener("click", function () {
+          ed.value = "";
+          ed.focus();
+          gutter();
+          cursor();
+          st("ready", "editor cleared");
+        });
+
+        /* ─── Panel controls ─── */
+        rMin.addEventListener("click", function () {
+          res.classList.toggle("collapsed");
+          rMin.textContent = res.classList.contains("collapsed") ? "□" : "─";
+        });
+        rMax.addEventListener("click", function () {
+          res.classList.toggle("maxed");
+        });
+        rCls.addEventListener("click", function () {
+          res.classList.remove("open", "collapsed", "maxed");
+          st("ready", "");
+        });
+
+        /* ─── Resize drag ─── */
+        var drag = false,
+          sy = 0,
+          sh = 0;
+        hdl.addEventListener("mousedown", function (e) {
+          drag = true;
+          sy = e.clientY;
+          sh = res.offsetHeight;
+          hdl.classList.add("active");
+          document.body.style.cursor = "ns-resize";
+          e.preventDefault();
+        });
+        document.addEventListener("mousemove", function (e) {
+          if (!drag) return;
+          var nh = sh + (sy - e.clientY);
+          var mx = window.innerHeight * 0.78;
+          if (nh < 56) nh = 56;
+          if (nh > mx) nh = mx;
+          res.style.height = nh + "px";
+          res.style.maxHeight = nh + "px";
+          res.classList.remove("maxed");
+        });
+        document.addEventListener("mouseup", function () {
+          if (!drag) return;
+          drag = false;
+          hdl.classList.remove("active");
+          document.body.style.cursor = "";
+        });
+
+        /* ─── Run events ─── */
+        run.addEventListener("click", go);
+        ed.addEventListener("keydown", function (e) {
+          if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+            e.preventDefault();
+            go();
+          }
+          if (e.key === "Tab") {
+            e.preventDefault();
+            var s = ed.selectionStart,
+              en = ed.selectionEnd;
+            ed.value = ed.value.substring(0, s) + "  " + ed.value.substring(en);
+            ed.selectionStart = ed.selectionEnd = s + 2;
+            gutter();
+          }
+        });
+
+        /* ─── Init ─── */
+        gutter();
+        cursor();
+        setTimeout(go, 100);
+      })();
+    </script>
+  </body>
+</html>
