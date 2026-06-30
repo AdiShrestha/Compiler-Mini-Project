@@ -20,8 +20,8 @@ ERROR_RE = re.compile(
 )
 
 
-def parse_sql(sql: str) -> dict:
-    """Run the sql_parser binary on `sql` and return a structured result dict."""
+def parse_one(sql: str) -> dict:
+    """Run the sql_parser binary on a single SQL statement and return a structured result."""
     try:
         result = subprocess.run(
             [str(PARSER), sql],
@@ -30,29 +30,25 @@ def parse_sql(sql: str) -> dict:
             timeout=30,
         )
     except FileNotFoundError:
-        return {"valid": False, "summary": "sql_parser binary not found", "errorCount": 1, "errors": []}
+        return {"valid": False, "summary": "sql_parser binary not found", "errorCount": 1, "errors": [], "sql": sql}
     except subprocess.TimeoutExpired:
-        return {"valid": False, "summary": "Parser timed out", "errorCount": 1, "errors": []}
+        return {"valid": False, "summary": "Parser timed out", "errorCount": 1, "errors": [], "sql": sql}
 
     stdout = result.stdout
     stderr = result.stderr
 
-    # Detect valid / invalid
     valid = "INVALID SQL" not in stdout and "VALID SQL" in stdout
 
-    # Parse token count from stdout
     tokens = 0
     m = re.search(r"Tokens\s*:\s*(\d+)", stdout)
     if m:
         tokens = int(m.group(1))
 
-    # Parse statement type from stdout
     statement = ""
     m = re.search(r"Statement:\s*(.+)", stdout)
     if m:
         statement = m.group(1).strip()
 
-    # Parse errors from stderr
     errors = []
     for line in stderr.splitlines():
         m = ERROR_RE.match(line)
@@ -63,7 +59,6 @@ def parse_sql(sql: str) -> dict:
             message = m.group(4)
             errors.append({"line": line_num, "column": col, "lexeme": lexeme, "message": message})
 
-    # Fallback: if stdout has a count but we got no structured errors
     if not valid and not errors:
         summary = "Parse failed (no structured errors)"
         error_count = 1
@@ -81,7 +76,18 @@ def parse_sql(sql: str) -> dict:
         "statement": statement,
         "errorCount": error_count,
         "errors": errors,
+        "sql": sql,
     }
+
+
+def parse_multi(text: str) -> dict:
+    """Split SQL text by semicolons and parse each statement independently."""
+    stmts = [s.strip() for s in text.split(";") if s.strip()]
+    if not stmts:
+        return {"statements": []}
+
+    results = [parse_one(s) for s in stmts]
+    return {"statements": results}
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -98,7 +104,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self._json(400, {"error": "Invalid JSON"})
                 return
 
-            result = parse_sql(sql)
+            result = parse_multi(sql)
             self._json(200, result)
         else:
             self.send_response(404)
